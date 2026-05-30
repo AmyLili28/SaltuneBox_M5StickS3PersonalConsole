@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>独属于欢哥的小小音乐终端 | A6 Manual</title>
+  <link rel="stylesheet" href="../src/styles.css">
+</head>
+<body class="single export">
+<main class="book">
+  <section class="sheet cover">
+    <div class="bleed-bg"></div>
+    <div class="trim">
+      <div class="black-strip">A6 / GUIDE / 001</div>
+      <div class="vlabel">基于 M5 Stick S3 开发板的项目研发</div>
+      <h1 class="hand-title">独属于欢哥的小小音乐终端</h1>
+      <div class="circle"></div>
+      <div class="device"></div>
+      <p class="subtitle">A tiny music companion terminal<br>designed and assembled by 刘译璘 / Yilin</p>
+      <div class="small" style="position:absolute;left:8mm;bottom:9mm;">Only for Zion Yan · Don’t be afraid</div>
+      <div class="page-no">P01</div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="bleed-bg"></div>
+    <div class="trim">
+      <div class="spread-title">
+        <div>
+          <div class="section-code">READ FIRST / PREFACE</div>
+          <h2 class="page-title">关于这台<br>小东西</h2>
+        </div>
+        <div class="stamp">HELLO<br>欢欢</div>
+      </div>
+      <p>Hello 欢欢～如果你正在看这份说明书，说明这台小东西应该已经顺利到你手里了。</p>
+      <div class="thin-rule"></div>
+      <p>它其实没有什么特别正式的名字。某天突然觉得，如果把脑子里那些奇奇怪怪的小想法都塞进一个小盒子里，好像会很有意思，于是它就慢慢长出来了。</p>
+      <div class="blue-block rot" style="margin:4mm 0 3mm;">里面装着音乐、节奏、声音记录、随机灵感、时间、天气，还有动态视觉。把它当成一个可以随手拿起来玩一会儿的小玩具就好。</div>
+      <p class="small">Only for Zion Yan 是它的归属。Designated by Yilin 是我的小小署名。</p>
+      <div class="vlabel" style="right:5mm;top:95mm;">我会一直在</div>
+      <div class="page-no">P02</div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="bleed-bg"></div>
+    <div class="trim">
+      <div class="section-code">PARTS / MAP</div>
+      <h2 class="page-title">产品部件<br>说明</h2>
+      <div class="two-col" style="margin-top:5mm;">
+        <div class="device"></div>
+        <div>
+          <div class="listline"><strong>A</strong><p>进入当前功能、确认、开始、输入节拍。</p></div>
+          <div class="listline"><strong>B</strong><p>切换选项、停止录音、返回或翻下一条。</p></div>
+          <div class="listline"><strong>HOLD</strong><p>大部分页面长按 B 返回功能列表。</p></div>
+        </div>
+      </div>
+      <div class="rule"></div>
+      <p>功能列表：Clapping Music → Dino → Voice Memo → Coin Flip → Woodfish → RPS → Sandtimer → Haiyan → Volume → WiFi Setup → Weather → Today History → Hidden Entry</p>
+      <p class="small" style="margin-top:3mm;">“敲击”不是随便甩两下，而是像敲木鱼一样，沿设备纵向完成一次下去再回来的动作。</p>
+      <div class="pixel-arrow" style="position:absolute;right:9mm;bottom:22mm;">&gt;&gt; PLAY</div>
+      <div class="page-no">P03</div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="bleed-bg"></div>
+    <div class="trim">
+      <div class="section-code">QUICK START / 3 STEPS</div>
+      <h2 class="page-title">快速开始</h2>
+      <div class="step-layout" style="margin-top:7mm;">
+        <div class="step-no">01</div>
+        <div><h3 class="step-title">先联网</h3><p>进入 WiFi Setup，连接热点 M5StickS3-Setup，密码 12345678，然后在页面里填写 WiFi。</p></div>
+      </div>
+      <div class="step-layout" style="margin-top:5mm;">
+        <div class="step-no">02</div>
+        <div><h3 class="step-title">调音量</h3><p>进入 Volume。向上快速举一下大概率会增加音量，向下快速顿一下大概率会减少。</p></div>
+      </div>
+      <div class="step-layout" style="margin-top:5mm;">
+        <div class="step-no">03</div>
+        <div><h3 class="step-title">开始玩</h3><p>录一段 Voice Memo，打一局 Clapping Music，看看海水，或者敲敲木鱼。</p></div>
+      </div>
+      <div class="scribble" style="right:9mm;top:17mm;width:32mm;height:18mm;"></div>
+      <div class="page-no">P04</div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="bleed-bg"></div>
+    <div class="trim">
+      <div class="section-code">USE STEPS / 01</div>
+      <div class="step-layout">
+        <div class="step-no">01</div>
+        <div><h2 class="page-title">节奏、游戏<br>和录音</h2></div>
+      </div>
+      <div class="icon-grid" style="margin-top:7mm;">
+        <div class="icon-card"><b>Clapping Music</b><span>Steve Reich / rhythm</span><p>选 Easy、Medium、Hard 或 Practice。按 A 跟着节奏拍进去，程序统计准确率、连击和完成度。</p></div>
+        <div class="icon-card"><b>Dino</b><span>tiny game</span><p>A 跳跃，B 趴下。游戏结束后 A 再来一局，最高分会自动保存。</p></div>
+        <div class="icon-card"><b>Voice Memo</b><span>record ideas</span><p>选 + New rec 按 A 录音，录音时按 B 保存。已有 Memo 按 A 播放，长按 A 删除。</p></div>
+      </div>
+      <div class="blue-block" style="position:absolute;left:7mm;right:7mm;bottom:17mm;">灵感经常出现在洗澡、走路、准备睡觉，或者明明已经关灯了的时候。先录下来总没错。</div>
+      <div class="page-no">P05</div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="bleed-bg"></div>
+    <div class="trim">
+      <div class="section-code">USE STEPS / 02</div>
+      <div class="step-layout">
+        <div class="step-no">02</div>
+        <div><h2 class="page-title">随机、敲击<br>和一点点发呆</h2></div>
+      </div>
+      <div class="collage-frame" style="margin-top:6mm;height:36mm;">
+        <div class="black-strip" style="position:absolute;left:4mm;top:5mm;">A OR KNOCK</div>
+        <div class="pixel-arrow" style="position:absolute;right:7mm;top:17mm;">&lt;-- --&gt;</div>
+      </div>
+      <div class="two-col" style="margin-top:4mm;">
+        <div><h3 class="step-title">Coin / Woodfish</h3><p>抛硬币解决一些不太重要但又懒得思考的问题。木鱼敲一下响一下，计数会保存。</p></div>
+        <div><h3 class="step-title">RPS</h3><p>Rock / Paper / Scissors。里面的修狗爪爪画了好几版，可爱的修狗爪爪像不像某自由狗呢。逃。</p></div>
+      </div>
+      <p class="small" style="margin-top:3mm;">A 开始，也可以纵向敲击一次触发。Woodfish 长按 A 清零。</p>
+      <div class="page-no">P06</div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="bleed-bg"></div>
+    <div class="trim">
+      <div class="section-code">USE STEPS / 03</div>
+      <div class="step-layout">
+        <div class="step-no">03</div>
+        <div><h2 class="page-title">时间、海水<br>联网和隐藏入口</h2></div>
+      </div>
+      <div class="icon-grid" style="grid-template-columns:repeat(2,1fr);margin-top:5mm;">
+        <div class="icon-card"><b>Sandtimer</b><span>gravity timer</span><p>默认 30 秒，左右晃动调时间，A 开始。倒计时中 A 暂停，B 换主题。</p></div>
+        <div class="icon-card"><b>Haiyan</b><span>ocean bottle</span><p>海盐的小世界。海水会跟着重力流动，背景会随时间变化。</p></div>
+        <div class="icon-card"><b>Weather / History</b><span>online bits</span><p>联网后可看天气；Today History 会偏向音乐史和摇滚相关内容。</p></div>
+        <div class="icon-card"><b>Hidden Entry</b><span>open quietly</span><p>最后那个没有名字的入口，可以留到比较安静的时候再打开。</p></div>
+      </div>
+      <div class="circle" style="right:8mm;bottom:10mm;"></div>
+      <div class="page-no">P07</div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="bleed-bg"></div>
+    <div class="trim">
+      <div class="section-code">CAUTION / PLEASE NOTICE</div>
+      <h2 class="page-title">注意事项</h2>
+      <div class="warning-grid" style="margin-top:7mm;">
+        <div class="warn"><b>MEMORY</b><p>设备内存有点小，Voice Memo 适合记录短旋律，可能最多 40 秒左右。</p></div>
+        <div class="warn"><b>MOTION</b><p>动作感应不用特别剧烈，尤其 Sandtimer 稍微倾斜就好。</p></div>
+        <div class="warn"><b>WEATHER</b><p>天气根据网络 IP 粗略判断城市，没有定位功能，也没有偷偷定位。</p></div>
+        <div class="warn"><b>OFFLINE</b><p>WiFi Setup 前面的功能基本可以离线使用，时钟同步和联网信息需要网络。</p></div>
+      </div>
+      <div class="black-strip" style="margin-top:6mm;">NOT A SERIOUS MACHINE / BUT IT WORKS</div>
+      <div class="page-no">P08</div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="bleed-bg"></div>
+    <div class="trim">
+      <div class="section-code">FAQ / TROUBLESHOOT</div>
+      <h2 class="page-title">常见问题</h2>
+      <div class="qa" style="margin-top:5mm;">
+        <div class="qa-row"><div>没联网？</div><div>进入 WiFi Setup，连接设备热点 M5StickS3-Setup，密码 12345678，再填家里的 WiFi。</div></div>
+        <div class="qa-row"><div>录音没声音？</div><div>先去 Volume 试听音量；录音播放会切换扬声器状态，等 Playing 结束再操作。</div></div>
+        <div class="qa-row"><div>动作不触发？</div><div>敲击要沿设备纵向完成一次下去再回来，不是随便晃两下。</div></div>
+        <div class="qa-row"><div>天气不准？</div><div>城市来自网络 IP 粗定位，只适合出门前随手看一眼。</div></div>
+      </div>
+      <div class="vlabel" style="right:5mm;top:48mm;">慢慢按两下基本就会了</div>
+      <div class="page-no">P09</div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="bleed-bg"></div>
+    <div class="trim">
+      <div class="section-code">CARE / STORAGE</div>
+      <h2 class="page-title">维护与收纳</h2>
+      <div class="collage-frame" style="height:33mm;margin:6mm 0 5mm;">
+        <div class="device" style="transform:scale(.58) rotate(-7deg);position:absolute;left:3mm;top:-12mm;"></div>
+        <div class="black-strip" style="position:absolute;right:3mm;bottom:4mm;">KEEP DRY</div>
+      </div>
+      <div class="listline"><strong>01</strong><p>保持干燥，避免进水。Haiyan 是屏幕里的海，不是真的海。</p></div>
+      <div class="listline"><strong>02</strong><p>不用时可以关机或充电收纳，避免长时间低电量放置。</p></div>
+      <div class="listline"><strong>03</strong><p>录音如果不需要，可以在 Voice Memo 里长按 A 删除，给之后的灵感留空间。</p></div>
+      <div class="listline"><strong>04</strong><p>如果之后要换图片、改文字、更新程序，可以基于当前工程继续修改。</p></div>
+      <div class="page-no">P10</div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <div class="bleed-bg"></div>
+    <div class="trim">
+      <div class="section-code">INFO / CONTACT / LOG</div>
+      <h2 class="page-title">保修信息<br>联系方式</h2>
+      <div class="two-col" style="margin-top:5mm;align-items:start;">
+        <div>
+          <p>这不是商业产品，是译璘做给欢哥的小小项目。</p>
+          <div class="thin-rule"></div>
+          <p class="small">作者 / 刘译璘<br>版本 / A6 GUIDE 001<br>日期 / 2026-05-30</p>
+        </div>
+        <div class="qr"></div>
+      </div>
+      <div class="black-strip" style="margin-top:5mm;">UPDATE LOG / tiny version</div>
+      <div class="log-row"><b>v0.9</b><span>新增 Loveletter 隐藏信箱，Day1 / Day6575 / Day8785。</span></div>
+      <div class="log-row"><b>v0.8</b><span>新增 Volume；Voice Memo 多段播放修复；木鱼音频修复。</span></div>
+      <div class="log-row"><b>v0.7</b><span>Haiyan 流体重力方向、Sandtimer、Clapping Music、Today History 调整。</span></div>
+      <div class="log-row"><b>v0.6</b><span>Dino、Weather、WiFi Setup、RPS、Woodfish 等功能加入。</span></div>
+      <div class="page-no">P11</div>
+    </div>
+  </section>
+
+  <section class="sheet back">
+    <div class="bleed-bg"></div>
+    <div class="trim">
+      <div>
+        <div class="black-strip">ONE MESSAGE</div>
+        <p class="back-quote" style="margin-top:9mm;">谢谢你写歌。<br>谢谢你还愿意一直表达、一直创作。</p>
+        <div class="circle" style="left:10mm;top:50mm;width:58mm;height:26mm;"></div>
+      </div>
+      <div>
+        <p>如果哪天你刚好觉得无聊，或者刚好有一句旋律不知道记在哪里，或者只是想随便按点什么，希望它能派上一点用场。</p>
+        <div class="thin-rule"></div>
+        <p class="small">至少它从最开始的一堆想法、草稿和 Bug，变成了现在这个样子，然后顺利跑到了你的手里。这件事本身就挺好的。</p>
+      </div>
+      <div>
+        <p class="subtitle">Designated by Yilin<br>Only for Zion Yan</p>
+        <div class="page-no">P12</div>
+      </div>
+    </div>
+  </section>
+</main>
+</body>
+</html>

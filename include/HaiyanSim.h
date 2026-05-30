@@ -21,12 +21,12 @@ public:
 
   void reset() {
     int n = 0;
-    const int cols = 22;
+    const int cols = 24;
     const int rows = 8;
     for (int y = 0; y < rows && n < PARTICLES; ++y) {
       for (int x = 0; x < cols && n < PARTICLES; ++x) {
-        p[n].x = 10 + x * 5.2f + (y & 1) * 2.3f;
-        p[n].y = 166 + y * 5.3f;
+        p[n].x = 8 + x * 5.0f + (y & 1) * 2.1f;
+        p[n].y = 160 + y * 5.2f;
         p[n].vx = 0;
         p[n].vy = 0;
         oldX[n] = -1000;
@@ -36,23 +36,31 @@ public:
     }
   }
 
-  void step(float ax, float ay) {
+  void step(float ax, float ay, float az) {
     uint32_t now = millis();
     float dt = (now - lastMs) / 1000.0f;
     lastMs = now;
-    if (dt <= 0 || dt > 0.026f) dt = 0.014f;
+    if (dt <= 0 || dt > 0.024f) dt = 0.012f;
 
-    // StickS3 portrait mapping: tilt left/right and forward/back like a small bottle.
-    float gx = ax * 560.0f;
-    float gy = -ay * 560.0f + 120.0f;
+    float mag = sqrtf(ax * ax + ay * ay + az * az);
+    if (mag < 0.2f) mag = 1.0f;
+    ax /= mag;
+    ay /= mag;
+    az /= mag;
 
-    for (int sub = 0; sub < 2; ++sub) {
-      float sdt = dt * 0.5f;
+    // IMU axes are rotated against the portrait screen; swap X/Y so water falls to the visual bottle bottom.
+    tiltX = tiltX * 0.28f + (-ay) * 0.72f;
+    tiltY = tiltY * 0.28f + (-ax) * 0.72f;
+    float gx = tiltX * 1040.0f;
+    float gy = tiltY * 1040.0f;
+
+    for (int sub = 0; sub < 3; ++sub) {
+      float sdt = dt / 3.0f;
       for (int i = 0; i < PARTICLES; ++i) {
-        p[i].vx = constrain(p[i].vx + gx * sdt, -520.0f, 520.0f);
-        p[i].vy = constrain(p[i].vy + gy * sdt, -520.0f, 520.0f);
-        p[i].vx *= 0.986f;
-        p[i].vy *= 0.986f;
+        p[i].vx = constrain(p[i].vx + gx * sdt, -760.0f, 760.0f);
+        p[i].vy = constrain(p[i].vy + gy * sdt, -760.0f, 760.0f);
+        p[i].vx *= 0.989f;
+        p[i].vy *= 0.989f;
         p[i].x += p[i].vx * sdt;
         p[i].y += p[i].vy * sdt;
         collide(p[i]);
@@ -63,22 +71,23 @@ public:
 
   void draw() {
     auto& d = M5.Display;
-    uint16_t bg = bgColor();
     uint16_t density[GRID_W * GRID_H];
     memset(density, 0, sizeof(density));
 
     for (int i = 0; i < PARTICLES; ++i) {
       int gx = constrain((int)(p[i].x * GRID_W / SCREEN_W), 0, GRID_W - 1);
       int gy = constrain((int)(p[i].y * GRID_H / SCREEN_H), 0, GRID_H - 1);
-      addDensity(density, gx, gy, 145);
-      addDensity(density, gx - 1, gy, 48);
-      addDensity(density, gx + 1, gy, 48);
-      addDensity(density, gx, gy - 1, 42);
-      addDensity(density, gx, gy + 1, 42);
+      addDensity(density, gx, gy, 150);
+      addDensity(density, gx - 1, gy, 54);
+      addDensity(density, gx + 1, gy, 54);
+      addDensity(density, gx, gy - 1, 46);
+      addDensity(density, gx, gy + 1, 46);
+      addDensity(density, gx - 1, gy + 1, 24);
+      addDensity(density, gx + 1, gy + 1, 24);
     }
 
     d.startWrite();
-    d.fillScreen(bg);
+    drawSkyBackground();
     firstDraw = false;
     for (int gy = 0; gy < GRID_H; ++gy) {
       for (int gx = 0; gx < GRID_W; ++gx) {
@@ -88,8 +97,8 @@ public:
         int x1 = (gx + 1) * SCREEN_W / GRID_W;
         int y0 = gy * SCREEN_H / GRID_H;
         int y1 = (gy + 1) * SCREEN_H / GRID_H;
-        uint8_t alpha = constrain((int)den, 92, 214);
-        uint16_t c = blend565(bg, waterGradient(gy), alpha);
+        uint8_t alpha = constrain((int)den, 84, 202);
+        uint16_t c = blend565(skyColorAt((y0 + y1) / 2), waterGradient(gy), alpha);
         d.fillRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1, c);
       }
     }
@@ -99,30 +108,40 @@ public:
   static constexpr int particleCount() { return PARTICLES; }
 
 private:
-  static constexpr int PARTICLES = 176;
-  static constexpr float R = 3.15f;
+  static constexpr int PARTICLES = 192;
+  static constexpr float R = 3.05f;
   static constexpr int DRAW_R = 3;
   static constexpr int ERASE_R = 4;
   static constexpr float MIN_DIST = R * 1.58f;
   static constexpr float MIN_DIST2 = MIN_DIST * MIN_DIST;
-  static constexpr int GRID_W = 18;
-  static constexpr int GRID_H = 32;
+  static constexpr float COHESION_DIST = R * 3.45f;
+  static constexpr float COHESION_DIST2 = COHESION_DIST * COHESION_DIST;
+  static constexpr int GRID_W = 20;
+  static constexpr int GRID_H = 34;
 
   WaterParticle p[PARTICLES];
   float oldX[PARTICLES];
   float oldY[PARTICLES];
   uint32_t lastMs = 0;
   bool firstDraw = true;
+  float tiltX = 0;
+  float tiltY = 0;
+
+  struct SkyPalette {
+    uint16_t top;
+    uint16_t bottom;
+    uint8_t alpha;
+  };
 
   void collide(WaterParticle& q) {
     const float left = DRAW_R;
     const float right = SCREEN_W - 1 - DRAW_R;
     const float top = DRAW_R;
     const float bottom = SCREEN_H - 1 - DRAW_R;
-    if (q.x < left) { q.x = left; q.vx = fabsf(q.vx) * 0.34f; q.vy *= 0.88f; }
-    if (q.x > right) { q.x = right; q.vx = -fabsf(q.vx) * 0.34f; q.vy *= 0.88f; }
-    if (q.y < top) { q.y = top; q.vy = fabsf(q.vy) * 0.34f; q.vx *= 0.88f; }
-    if (q.y > bottom) { q.y = bottom; q.vy = -fabsf(q.vy) * 0.34f; q.vx *= 0.92f; }
+    if (q.x < left) { q.x = left; q.vx = fabsf(q.vx) * 0.42f; q.vy *= 0.94f; }
+    if (q.x > right) { q.x = right; q.vx = -fabsf(q.vx) * 0.42f; q.vy *= 0.94f; }
+    if (q.y < top) { q.y = top; q.vy = fabsf(q.vy) * 0.42f; q.vx *= 0.94f; }
+    if (q.y > bottom) { q.y = bottom; q.vy = -fabsf(q.vy) * 0.42f; q.vx *= 0.96f; }
   }
 
   void separateParticles() {
@@ -135,7 +154,7 @@ private:
           float d = sqrtf(d2);
           float nx = dx / d;
           float ny = dy / d;
-          float push = (MIN_DIST - d) * 0.34f;
+          float push = (MIN_DIST - d) * 0.31f;
           p[i].x -= nx * push;
           p[i].y -= ny * push;
           p[j].x += nx * push;
@@ -145,7 +164,7 @@ private:
           float rvy = p[j].vy - p[i].vy;
           float vn = rvx * nx + rvy * ny;
           if (vn < 0) {
-            float impulse = -vn * 0.28f;
+            float impulse = -vn * 0.38f;
             p[i].vx -= nx * impulse;
             p[i].vy -= ny * impulse;
             p[j].vx += nx * impulse;
@@ -153,21 +172,58 @@ private:
           }
           collide(p[i]);
           collide(p[j]);
+        } else if (d2 >= MIN_DIST2 && d2 < COHESION_DIST2) {
+          float d = sqrtf(d2);
+          float pull = (COHESION_DIST - d) * 0.0028f;
+          float ax = dx * pull;
+          float ay = dy * pull;
+          p[i].vx += ax;
+          p[i].vy += ay;
+          p[j].vx -= ax;
+          p[j].vy -= ay;
         }
       }
     }
   }
 
-  uint16_t bgColor() {
+  int minuteOfDay() {
     time_t now = time(nullptr);
     tm* t = localtime(&now);
-    int minute = t ? t->tm_hour * 60 + t->tm_min : 22 * 60;
-    if (minute >= 300 && minute < 450) return M5.Display.color565(18, 15, 34);
-    if ((minute >= 450 && minute < 660) || (minute >= 840 && minute < 1020)) return M5.Display.color565(8, 26, 34);
-    if (minute >= 660 && minute < 840) return M5.Display.color565(8, 18, 42);
-    if (minute >= 1020 && minute < 1140) return M5.Display.color565(20, 13, 34);
-    if (minute >= 1140 && minute < 1260) return M5.Display.color565(4, 7, 24);
-    return M5.Display.color565(0, 0, 0);
+    return t ? t->tm_hour * 60 + t->tm_min : 22 * 60;
+  }
+
+  SkyPalette skyPalette() {
+    int minute = minuteOfDay();
+    if (minute >= 300 && minute < 450) {
+      return { M5.Display.color565(238, 112, 150), M5.Display.color565(78, 156, 232), 92 };
+    }
+    if ((minute >= 450 && minute < 660) || (minute >= 840 && minute < 1020)) {
+      return { M5.Display.color565(88, 172, 236), M5.Display.color565(88, 220, 176), 76 };
+    }
+    if (minute >= 660 && minute < 840) {
+      return { M5.Display.color565(78, 166, 238), M5.Display.color565(134, 205, 255), 70 };
+    }
+    if (minute >= 1020 && minute < 1140) {
+      return { M5.Display.color565(76, 146, 228), M5.Display.color565(238, 132, 204), 92 };
+    }
+    if (minute >= 1140 && minute < 1260) {
+      return { M5.Display.color565(8, 30, 92), M5.Display.color565(2, 8, 34), 190 };
+    }
+    return { M5.Display.color565(0, 0, 0), M5.Display.color565(0, 0, 0), 255 };
+  }
+
+  uint16_t skyColorAt(int y) {
+    SkyPalette p = skyPalette();
+    int mix = constrain(map(y, 0, SCREEN_H - 1, 0, 255), 0, 255);
+    uint16_t grad = blend565(p.top, p.bottom, mix);
+    return blend565(M5.Display.color565(0, 0, 0), grad, p.alpha);
+  }
+
+  void drawSkyBackground() {
+    auto& d = M5.Display;
+    for (int y = 0; y < SCREEN_H; y += 6) {
+      d.fillRect(0, y, SCREEN_W, 6, skyColorAt(y + 3));
+    }
   }
 
   void addDensity(uint16_t* density, int gx, int gy, uint16_t value) {

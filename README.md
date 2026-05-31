@@ -30,6 +30,12 @@ D:\Codex\pio-py311\Scripts\platformio.exe run -t buildfs
 - `dist/manual_A6_print_ready.pdf`：带 3mm 出血和裁切标记的打印版。
 - `dist/manual_A6_preview.png`：封面和内页预览图。
 
+最终版《Saltune Box》红黑说明书保存在 `dist/final_manual/`：
+
+- `Saltune_Box_V6_red_black_reading_preview_64x98mm_P24fix.pdf`：阅读预览版。
+- `Saltune_Box_V6_red_black_print_bleed_pages_70x104mm_P24fix.pdf`：单页带出血打印版。
+- `Saltune_Box_V6_red_black_saddle_stitch_imposed_bleed_P24fix.pdf`：骑马钉拼版带出血版。
+
 重新导出：
 
 ```powershell

@@ -51,15 +51,15 @@ python src\generate.py
 | Home | 联网后用 NTP 同步北京时间到 RTC，居中显示日期/星期、大号时间、时间上方电池条、WiFi 状态、YR 标志、`Don't be afraid`、`Only for Zion Yan` 与 `Designated by YIlin`；无有效 RTC 时会在 Home 继续重试 |
 | Launcher | B 短按切换功能，A 进入功能，B 长按回 Home；顶部显示日期/时间与电量；功能页使用 `135x135` 图片资源，图片下方显示名称 |
 | Clapping Music | 按 `PRODUCT_GUIDE.md` 恢复 12 步节奏游戏：Easy/Medium/Hard、Play/Practice、M5/YOU 双行节拍点、ACC 评分、Advance 进度、暂停/继续、Complete/Game Over；当前版本放宽节拍判定、按下 A 即刻记录输入，并把黄色显示统一替换为粉色 |
-| Voice Memo | `+ New rec` 与多条 `Memo` 列表、录音保存到 `/memo_0.wav` 到 `/memo_7.wav`、播放、长按 A 删除、录音时 B 停止保存 |
-| Coin Flip | A 键或摇动随机正反面 |
+| Voice Memo | `+ New rec` 与多条 `Memo` 列表、录音保存到 `/memo_0.wav` 到 `/memo_7.wav`、播放、长按 A 删除、录音时 B 停止保存；当前资源压缩后 LittleFS 预计可用于录音的总时长约 41 秒，实际建议按约 40 秒使用 |
+| Coin Flip | A 键或完整纵向敲击触发随机正反面；触发后会在 0.8 秒内快速随机闪烁 head/tail 图片，随后定格最终图片，并在图片下方显示 `head` 或 `tail` |
 | Woodfish | 计数保存、A 短按/摇动敲击、长按 A 清零、增强音量的 WAV 木鱼声、帧图动画 |
 | RPS | A 键或摇动触发，进入后有防误触延迟，快速闪图后横向居中显示石头/剪刀/布结果图片和英文名称 |
 | WiFi Setup | 显示 AP 名称、热点密码 `12345678`、访问地址、STA 连接状态；AP `M5StickS3-Setup`、DNS captive portal、网页配网；联网和外网检查成功后保存到最多 5 个 WiFi 列表，B 切换已保存网络，A 连接，长按 A 删除，并同步 RTC 与 Home 城市 |
 | Sandtimer | 进入后初始为 30 秒，用重力左右晃动选择 0 到 60 分钟倒计时，每次 30 秒步进；A 确认进入沙漏倒计时，运行中 A 暂停、B 切换主题，暂停后长按 B 回时间选择页 |
 | Haiyan | C++ 实时海盐模拟，按时间切换背景，交换 IMU X/Y 轴后按 bottle-of-ocean 风格重力映射，让水体始终流向屏幕里的新瓶底，A 重置，短按 B 不退出，长按 B 回功能页 |
 | Weather | 联网后 IP 粗定位，顶部居中显示城市，大号显示当前温度/天气图标，并列出 7 天最高/最低温和晴/阴/雨/雪状态；定位成功后把城市保存给 Home |
-| Today History | 进入后按当前 RTC 日期自动读取 Wikimedia `On this day`，优先筛选音乐史/摇滚相关事件，并从事件、出生、去世列表中补充音乐人条目；API 不通时使用少量本地音乐史兜底；A 刷新，B 切换 |
+| Today History | 进入后按当前 RTC 日期优先读取 `https://api.dayinhistory.dev/v1/...`，使用 M5 Stick S3 可用的 HTTPS 直连方式加载较小的历史数据，并优先筛选音乐史/摇滚相关事件；Wikipedia/Wikimedia `On this day` 作为后备来源；无 WiFi、API 不通或当天没有音乐关键词时，会使用本地音乐史兜底：有精确日期就显示当天音乐史，没有精确日期就按日期轮换摇滚/音乐史卡片；A 刷新，B 切换 |
 | Dino | Google 离线小恐龙风格游戏：A 跳跃，B 短按/按住趴下，趴下最长持续约 1.8 秒；暂停/入口/结束页长按 B 回功能页；结束页 A 再来一局、B 回入口页，最高分保存到 NVS |
 
 所有独立功能内，长按 B 返回功能选择页并停留在当前功能卡片；回到功能选择页后，短按 B 继续切换下一个功能，长按 B 返回 Home。
@@ -70,11 +70,14 @@ python src\generate.py
 
 - 功能页图片：`data/img/*.jpg`
 - RPS 结果图片：`data/img/rps_rock.jpg`、`rps_scissors.jpg`、`rps_paper.jpg`
+- Coin Flip 结果图片：`data/img/coin_head.jpg`、`data/img/coin_tail.jpg`
 - 木鱼动画帧：`data/img/woodfish_frame0.jpg` 到 `woodfish_frame4.jpg`
 - 木鱼音效：`data/audio/woodfish_knock.wav`
 - Today History 功能页图片：`data/img/history.jpg`
 - Dino 功能页图片：`data/img/dino.jpg`
 - Home YR 标志：`data/img/yr_logo.jpg`
 - Native Voice Memo 录音槽位：`/memo_0.wav` 到 `/memo_7.wav`，并兼容旧的 `/memo.wav`
+
+当前 `data/` 资源约 110.7KB；LittleFS 分区为 0x160000 字节。Voice Memo 使用 16kHz / 16-bit / mono WAV，约 32KB/s，因此总录音空间约 41 秒，考虑文件系统元数据后建议按约 40 秒使用。
 
 注意：当前固件只打包和显示 JPG 图片。动画在代码里按 JPG 帧切换图片实现，避免把未使用的 PNG 解码器编进固件。

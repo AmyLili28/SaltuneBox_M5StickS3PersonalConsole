@@ -26,6 +26,10 @@ static HaiyanSim haiyan;
 
 static int woodfishCount = 0;
 static int coinFace = -1;
+static bool coinFlipping = false;
+static int coinPreviewFace = 0;
+static uint32_t coinFlipStartedAt = 0;
+static uint32_t coinFlipNextFrameAt = 0;
 static int rpsResult = -1;
 static uint8_t loveStep = 0;
 
@@ -131,6 +135,7 @@ static String historyEvents[8];
 static int historyYears[8] = {0};
 static uint8_t historyCount = 0;
 static uint8_t historyIndex = 0;
+static uint8_t historyTextPage = 0;
 static String currentPlace = "Current";
 static bool timeSynced = false;
 static uint32_t lastRtcSyncTry = 0;
@@ -168,6 +173,7 @@ static constexpr uint16_t SAND_DEFAULT_SECONDS = 30;
 static constexpr uint16_t SAND_MAX_SECONDS = 3600;
 static constexpr uint16_t SAND_STEP_SECONDS = 30;
 static constexpr uint32_t DINO_MAX_DUCK_MS = 1800;
+static constexpr uint32_t COIN_FLIP_MS = 800;
 
 static void refreshLocationFromNetwork();
 
@@ -281,6 +287,35 @@ static String lineSlice(String text, size_t start, size_t maxLen) {
   String line = text.substring(start, end);
   line.trim();
   return line;
+}
+
+static size_t advanceTextRows(const String& text, size_t pos, uint8_t rows, uint8_t charsPerRow) {
+  for (uint8_t row = 0; row < rows; ++row) {
+    String line = lineSlice(text, pos, charsPerRow);
+    if (!line.length()) return text.length();
+    pos += line.length();
+    while (pos < text.length() && text[pos] == ' ') pos++;
+  }
+  return pos;
+}
+
+static size_t historyTextPageStart(const String& text, uint8_t page) {
+  size_t pos = 0;
+  for (uint8_t p = 0; p < page && pos < text.length(); ++p) {
+    pos = advanceTextRows(text, pos, 5, 20);
+  }
+  return pos;
+}
+
+static uint8_t historyTextPageCount(const String& text) {
+  if (!text.length()) return 1;
+  uint8_t pages = 0;
+  size_t pos = 0;
+  while (pos < text.length() && pages < 9) {
+    pages++;
+    pos = advanceTextRows(text, pos, 5, 20);
+  }
+  return pages ? pages : 1;
 }
 
 static void drawStatusBar() {
@@ -575,6 +610,8 @@ static bool httpProbe(const char* url, uint32_t timeoutMs = 2200) {
 static bool fetchTextUrl(const String& url, String& payload, int& httpCode, uint32_t timeoutMs = 7000) {
   HTTPClient http;
   http.setTimeout(timeoutMs);
+  http.setConnectTimeout(timeoutMs);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   bool ok = false;
   if (url.startsWith("https://")) {
     WiFiClientSecure client;
@@ -587,11 +624,50 @@ static bool fetchTextUrl(const String& url, String& payload, int& httpCode, uint
     httpCode = -900;
     return false;
   }
-  http.addHeader("User-Agent", "M5StickS3PersonalConsole/1.0");
+  http.addHeader("User-Agent", "SaltuneBox/1.0 (https://github.com/AmyLili28/M5StickS3PersonalConsole; Today History)");
+  http.addHeader("Api-User-Agent", "SaltuneBox/1.0 (https://github.com/AmyLili28/M5StickS3PersonalConsole; Today History)");
   http.addHeader("Accept", "application/json,text/plain,*/*");
   httpCode = http.GET();
   payload = http.getString();
   http.end();
+  return httpCode >= 200 && httpCode < 300;
+}
+
+static bool fetchPlainHttps(const char* host, const String& path, String& payload, int& httpCode, uint32_t timeoutMs = 7000) {
+  payload = "";
+  httpCode = 0;
+  WiFiClientSecure client;
+  client.setInsecure();
+  client.setTimeout(timeoutMs);
+  if (!client.connect(host, 443, timeoutMs)) {
+    httpCode = -903;
+    return false;
+  }
+  client.print(String("GET ") + path + " HTTP/1.1\r\n");
+  client.print(String("Host: ") + host + "\r\n");
+  client.print("User-Agent: SaltuneBox/1.0\r\n");
+  client.print("Accept: application/json\r\n");
+  client.print("Connection: close\r\n\r\n");
+
+  String status = client.readStringUntil('\n');
+  int firstSpace = status.indexOf(' ');
+  httpCode = firstSpace >= 0 ? status.substring(firstSpace + 1, firstSpace + 4).toInt() : -904;
+  while (client.connected() || client.available()) {
+    String header = client.readStringUntil('\n');
+    header.trim();
+    if (header.length() == 0) break;
+  }
+  uint32_t deadline = millis() + timeoutMs;
+  payload.reserve(12000);
+  while ((client.connected() || client.available()) && millis() < deadline) {
+    while (client.available()) {
+      payload += (char)client.read();
+      if (payload.length() > 14000) break;
+    }
+    if (payload.length() > 14000) break;
+    delay(1);
+  }
+  client.stop();
   return httpCode >= 200 && httpCode < 300;
 }
 
@@ -855,16 +931,61 @@ static bool connectSavedWifi(uint32_t timeoutMs = 6500) {
   return false;
 }
 
+static const char* coinFaceImage(int face) {
+  return face == 0 ? "/img/coin_head.jpg" : "/img/coin_tail.jpg";
+}
+
+static const char* coinFaceLabel(int face) {
+  return face == 0 ? "head" : "tail";
+}
+
+static void drawCoinFace(int face, bool finalFace) {
+  M5.Display.fillScreen(COLOR_BG);
+  if (!drawImage(coinFaceImage(face), 0, 38)) {
+    M5.Display.fillCircle(SCREEN_W / 2, 104, 42, COLOR_RED);
+    drawCenteredText(104, face == 0 ? "YES" : "NO", COLOR_FG, COLOR_RED, 1.5f);
+  }
+  drawCenteredText(188, finalFace ? coinFaceLabel(face) : "flipping", finalFace ? COLOR_FG : COLOR_MUTED, COLOR_BG, 1.3f);
+  drawCenteredText(218, "A / knock", COLOR_MUTED, COLOR_BG, 1);
+}
+
 static void drawCoinApp() {
   M5.Display.fillScreen(COLOR_BG);
+  if (coinFlipping) {
+    drawCoinFace(coinPreviewFace, false);
+    return;
+  }
   if (coinFace < 0) {
     drawImage(APPS[APP_COIN].icon, 0, 28);
     drawCenteredText(180, "Coin Flip", COLOR_FG, COLOR_BG, 1);
     drawCenteredText(118, "Knock / A", COLOR_MUTED, COLOR_BG, 1);
     return;
   }
-  M5.Display.fillCircle(SCREEN_W / 2, 108, 42, COLOR_YELLOW);
-  drawCenteredText(108, coinFace == 0 ? "HEAD" : "TAIL", COLOR_BG, COLOR_YELLOW, 1);
+  drawCoinFace(coinFace, true);
+}
+
+static void startCoinFlip() {
+  coinFace = random(0, 2);
+  coinPreviewFace = random(0, 2);
+  coinFlipping = true;
+  coinFlipStartedAt = millis();
+  coinFlipNextFrameAt = 0;
+  drawCoinFace(coinPreviewFace, false);
+}
+
+static void updateCoinFlip() {
+  if (mode != MODE_APP || running != APP_COIN || !coinFlipping) return;
+  uint32_t now = millis();
+  if (now - coinFlipStartedAt >= COIN_FLIP_MS) {
+    coinFlipping = false;
+    drawCoinApp();
+    return;
+  }
+  if (now >= coinFlipNextFrameAt) {
+    coinPreviewFace = random(0, 2);
+    coinFlipNextFrameAt = now + random(65, 135);
+    drawCoinFace(coinPreviewFace, false);
+  }
 }
 
 static void drawWoodfishApp(int frame = 0) {
@@ -1579,6 +1700,7 @@ static bool currentMonthDay(uint8_t& month, uint8_t& day) {
 static void setHistoryFallback(uint8_t month, uint8_t day, const String& status) {
   historyCount = 0;
   historyIndex = 0;
+  historyTextPage = 0;
   historyStatus = status;
   if (month == 5 && day == 29) {
     historyYears[0] = 1953;
@@ -1614,6 +1736,12 @@ static bool setMusicHistoryFallback(uint8_t month, uint8_t day, const String& st
     historyYears[1] = 1961;
     historyEvents[1] = "Melissa Etheridge, Grammy-winning rock singer-songwriter, was born.";
     historyCount = 2;
+  } else if (month == 6 && day == 2) {
+    historyYears[0] = 1941;
+    historyEvents[0] = "Charlie Watts, drummer for the Rolling Stones, was born in London.";
+    historyYears[1] = 1967;
+    historyEvents[1] = "The Beatles released Sgt. Pepper's Lonely Hearts Club Band in the United States.";
+    historyCount = 2;
   } else if (month == 1 && day == 8) {
     historyYears[0] = 1935;
     historyEvents[0] = "Elvis Presley, one of rock and roll's defining singers, was born.";
@@ -1645,6 +1773,37 @@ static bool setMusicHistoryFallback(uint8_t month, uint8_t day, const String& st
     historyEvents[0] = "John Lennon was killed in New York City.";
     historyCount = 1;
   }
+  if (historyCount == 0) {
+    struct LocalMusicNote {
+      int year;
+      const char* text;
+    };
+    static constexpr LocalMusicNote notes[] = {
+      {1954, "Bill Haley and His Comets helped push rock and roll into the mainstream with Rock Around the Clock."},
+      {1956, "Elvis Presley's early singles turned rock and roll into a global youth sound."},
+      {1963, "The Beatles' first album Please Please Me captured the start of Beatlemania."},
+      {1965, "Bob Dylan's electric period changed the sound and language of folk rock."},
+      {1967, "Jimi Hendrix expanded the vocabulary of electric guitar and psychedelic rock."},
+      {1969, "Woodstock became one of rock music's most famous festival moments."},
+      {1971, "Led Zeppelin IV helped define the scale and weight of hard rock."},
+      {1973, "Pink Floyd's The Dark Side of the Moon became a landmark concept album."},
+      {1975, "Queen's Bohemian Rhapsody pushed rock songwriting into theatrical new shapes."},
+      {1977, "Punk rock reshaped guitar music with speed, attitude, and directness."},
+      {1982, "Michael Jackson's Thriller changed pop recording, video, and live performance culture."},
+      {1987, "Guns N' Roses brought raw hard rock back into the mainstream."},
+      {1991, "Nirvana's Nevermind carried alternative rock into the center of popular music."},
+      {1997, "Radiohead's OK Computer became a defining alternative rock record."},
+      {2001, "The Strokes helped spark a new wave of garage rock revival."},
+      {2010, "Streaming began changing how musicians release songs and how fans discover music."},
+    };
+    uint8_t first = (month * 17 + day) % (sizeof(notes) / sizeof(notes[0]));
+    uint8_t second = (first + 7) % (sizeof(notes) / sizeof(notes[0]));
+    historyYears[0] = notes[first].year;
+    historyEvents[0] = notes[first].text;
+    historyYears[1] = notes[second].year;
+    historyEvents[1] = notes[second].text;
+    historyCount = 2;
+  }
   return historyCount > 0;
 }
 
@@ -1663,14 +1822,127 @@ static bool isMusicHistoryText(const String& text) {
   return false;
 }
 
-static void collectHistoryItems(JsonArray items, bool musicOnly) {
-  for (JsonObject item : items) {
-    if (historyCount >= 8) break;
-    String text = cleanApiText(item["text"].as<String>());
+static String readJsonStringValue(const String& text, int valueStart, int& valueEnd) {
+  String out;
+  bool esc = false;
+  for (int i = valueStart; i < (int)text.length(); ++i) {
+    char c = text[i];
+    if (esc) {
+      if (c == 'n' || c == 'r' || c == 't') out += ' ';
+      else if (c == 'u') {
+        i += 4;
+        out += ' ';
+      } else {
+        out += c;
+      }
+      esc = false;
+      continue;
+    }
+    if (c == '\\') {
+      esc = true;
+      continue;
+    }
+    if (c == '"') {
+      valueEnd = i;
+      return cleanApiText(out);
+    }
+    out += c;
+  }
+  valueEnd = text.length();
+  return cleanApiText(out);
+}
+
+static int readJsonYearNear(const String& payload, int from) {
+  int yearKey = payload.indexOf("\"year\":", from);
+  if (yearKey < 0) return 0;
+  int pos = yearKey + 7;
+  while (pos < (int)payload.length() && payload[pos] == ' ') pos++;
+  bool neg = false;
+  if (pos < (int)payload.length() && payload[pos] == '-') {
+    neg = true;
+    pos++;
+  }
+  int year = 0;
+  while (pos < (int)payload.length() && isDigit(payload[pos])) {
+    year = year * 10 + (payload[pos] - '0');
+    pos++;
+  }
+  return neg ? -year : year;
+}
+
+static String readJsonFieldInRange(const String& payload, const char* field, int from, int to) {
+  String key = String("\"") + field + "\":\"";
+  int keyPos = payload.indexOf(key, from);
+  if (keyPos < 0 || keyPos >= to) return "";
+  int valueStart = keyPos + key.length();
+  int valueEnd = valueStart;
+  return readJsonStringValue(payload, valueStart, valueEnd);
+}
+
+static int readJsonIntFieldInRange(const String& payload, const char* field, int from, int to) {
+  String value = readJsonFieldInRange(payload, field, from, to);
+  value.trim();
+  return value.toInt();
+}
+
+static void collectHistoryItemsFromPayload(const String& payload, bool musicOnly) {
+  int pos = 0;
+  while (historyCount < 8) {
+    int textKey = payload.indexOf("\"text\":\"", pos);
+    if (textKey < 0) break;
+    int textStart = textKey + 8;
+    int textEnd = textStart;
+    String text = readJsonStringValue(payload, textStart, textEnd);
+    int pagesKey = payload.indexOf("\"pages\"", textEnd);
+    int year = readJsonYearNear(payload, textEnd);
+    int yearKey = payload.indexOf("\"year\":", textEnd);
+    pos = textEnd + 1;
+    if (pagesKey < 0 || yearKey < 0 || pagesKey > yearKey) continue;
     if (!text.length()) continue;
     if (musicOnly && !isMusicHistoryText(text)) continue;
-    historyYears[historyCount] = item["year"].as<int>();
+    historyYears[historyCount] = year;
     historyEvents[historyCount] = text;
+    historyCount++;
+  }
+}
+
+static void collectDayInHistoryItemsFromPayload(const String& payload, const char* endpoint, bool musicOnly) {
+  int pos = 0;
+  while (historyCount < 8) {
+    int itemStart = payload.indexOf("{\"created_at\"", pos);
+    if (itemStart < 0) break;
+    int nextItem = payload.indexOf("{\"created_at\"", itemStart + 1);
+    int itemEnd = nextItem >= 0 ? nextItem : payload.indexOf("]}", itemStart);
+    if (itemEnd < 0) itemEnd = payload.length();
+    pos = itemEnd;
+
+    String text;
+    int year = 0;
+    if (strcmp(endpoint, "events") == 0) {
+      String title = readJsonFieldInRange(payload, "title", itemStart, itemEnd);
+      String desc = readJsonFieldInRange(payload, "description", itemStart, itemEnd);
+      year = readJsonIntFieldInRange(payload, "year", itemStart, itemEnd);
+      text = title;
+      if (desc.length()) {
+        if (text.length()) text += ". ";
+        text += desc;
+      }
+    } else {
+      String name = readJsonFieldInRange(payload, "name", itemStart, itemEnd);
+      String desc = readJsonFieldInRange(payload, "description", itemStart, itemEnd);
+      year = readJsonIntFieldInRange(payload, strcmp(endpoint, "births") == 0 ? "birth_year" : "death_year", itemStart, itemEnd);
+      text = name;
+      if (desc.length()) {
+        if (text.length()) text += ", ";
+        text += desc;
+      }
+    }
+
+    text = cleanApiText(text);
+    if (!text.length()) continue;
+    if (musicOnly && !isMusicHistoryText(text)) continue;
+    historyYears[historyCount] = year;
+    historyEvents[historyCount] = compactText(text, 150);
     historyCount++;
   }
 }
@@ -1678,14 +1950,34 @@ static void collectHistoryItems(JsonArray items, bool musicOnly) {
 static bool fetchHistoryEndpoint(const String& endpoint, const char* md, bool musicOnly) {
   String payload;
   int code = 0;
-  String url = String("https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/") + endpoint + "/" + md;
+  String url = String("https://en.wikipedia.org/api/rest_v1/feed/onthisday/") + endpoint + "/" + md;
   if (!fetchTextUrl(url, payload, code, 9000)) {
-    url = String("https://en.wikipedia.org/api/rest_v1/feed/onthisday/") + endpoint + "/" + md;
+    url = String("https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/") + endpoint + "/" + md;
     if (!fetchTextUrl(url, payload, code, 9000)) return false;
   }
-  JsonDocument doc;
-  if (deserializeJson(doc, payload)) return false;
-  collectHistoryItems(doc[endpoint].as<JsonArray>(), musicOnly);
+  collectHistoryItemsFromPayload(payload, musicOnly);
+  return true;
+}
+
+static const char* monthSlug(uint8_t month) {
+  static constexpr const char* names[] = {
+    "", "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december"
+  };
+  return month <= 12 ? names[month] : "";
+}
+
+static bool fetchDayInHistoryEndpoint(const char* endpoint, uint8_t month, uint8_t day, bool musicOnly) {
+  String payload;
+  int code = 0;
+  String path = String("/v1/") + endpoint + "/" + monthSlug(month) + "/" + String(day) + "/";
+  bool ok = fetchPlainHttps("api.dayinhistory.dev", path, payload, code, 12000);
+  if (!ok) {
+    delay(180);
+    ok = fetchPlainHttps("api.dayinhistory.dev", path, payload, code, 12000);
+  }
+  if (!ok) return false;
+  collectDayInHistoryItemsFromPayload(payload, endpoint, musicOnly);
   return true;
 }
 
@@ -1698,7 +1990,7 @@ static void fetchHistoryToday() {
     return;
   }
   if (WiFi.status() != WL_CONNECTED && !connectSavedWifi(9000)) {
-    setHistoryFallback(month, day, "No WiFi");
+    setMusicHistoryFallback(month, day, "Local Music");
     return;
   }
 
@@ -1707,20 +1999,21 @@ static void fetchHistoryToday() {
   historyCount = 0;
   historyIndex = 0;
 
-  bool anyResponse = fetchHistoryEndpoint("events", md, true);
-  if (historyCount < 8) anyResponse = fetchHistoryEndpoint("births", md, true) || anyResponse;
-  if (historyCount < 8) anyResponse = fetchHistoryEndpoint("deaths", md, true) || anyResponse;
-  if (historyCount == 0 && setMusicHistoryFallback(month, day, "Local Music")) {
-    return;
-  }
+  bool anyResponse = fetchDayInHistoryEndpoint("events", month, day, true);
+  if (historyCount < 8) anyResponse = fetchDayInHistoryEndpoint("births", month, day, true) || anyResponse;
+  if (historyCount < 8) anyResponse = fetchDayInHistoryEndpoint("deaths", month, day, true) || anyResponse;
+  if (historyCount == 0) anyResponse = fetchHistoryEndpoint("events", md, true) || anyResponse;
+  if (historyCount == 0) anyResponse = fetchHistoryEndpoint("births", md, true) || anyResponse;
+  if (historyCount == 0) anyResponse = fetchHistoryEndpoint("deaths", md, true) || anyResponse;
   if (historyCount == 0 && anyResponse) {
-    fetchHistoryEndpoint("events", md, false);
+    fetchDayInHistoryEndpoint("events", month, day, false);
   }
   if (historyCount == 0) {
-    setHistoryFallback(month, day, anyResponse ? "No music" : "API blocked");
+    setMusicHistoryFallback(month, day, "Local Music");
     return;
   }
   historyStatus = isMusicHistoryText(historyEvents[0]) ? "Music/Rock" : "Loaded";
+  historyTextPage = 0;
 }
 
 static void drawHistoryApp() {
@@ -1743,7 +2036,9 @@ static void drawHistoryApp() {
   String year = historyYears[idx] ? String(historyYears[idx]) : String("Info");
   drawCenteredText(84, year, COLOR_BLUE, COLOR_BG, 2);
   String text = historyEvents[idx];
-  size_t pos = 0;
+  uint8_t pageCount = historyTextPageCount(text);
+  if (historyTextPage >= pageCount) historyTextPage = 0;
+  size_t pos = historyTextPageStart(text, historyTextPage);
   for (int row = 0; row < 5; ++row) {
     String line = lineSlice(text, pos, 20);
     if (!line.length()) break;
@@ -1751,7 +2046,9 @@ static void drawHistoryApp() {
     pos += line.length();
     while (pos < text.length() && text[pos] == ' ') pos++;
   }
-  drawCenteredText(206, String(historyIndex + 1) + "/" + String(historyCount) + "  B next", COLOR_MUTED, COLOR_BG, 1);
+  String pageLabel = String(historyIndex + 1) + "/" + String(historyCount);
+  if (pageCount > 1) pageLabel += String(" p") + (historyTextPage + 1) + "/" + pageCount;
+  drawCenteredText(206, pageLabel + "  B next", COLOR_MUTED, COLOR_BG, 1);
   drawCenteredText(224, "A refresh", COLOR_MUTED, COLOR_BG, 1);
 }
 
@@ -2127,6 +2424,8 @@ static void resetAppState(AppId app) {
   if (app != APP_WIFI) wifiPortalStatus = "Ready";
   if (app == APP_COIN) {
     coinFace = -1;
+    coinFlipping = false;
+    coinPreviewFace = 0;
   } else if (app == APP_RPS) {
     rpsResult = -1;
   } else if (app == APP_CLAP) {
@@ -2170,6 +2469,7 @@ static void resetAppState(AppId app) {
     historyStatus = "Loading";
     historyCount = 0;
     historyIndex = 0;
+    historyTextPage = 0;
   } else if (app == APP_DINO) {
     dinoState = DINO_INTRO;
     dinoDuckHeld = false;
@@ -2272,7 +2572,16 @@ static void handleBRelease(uint32_t heldMs) {
       }
       drawWifiApp();
     } else if (running == APP_HISTORY) {
-      if (historyCount > 0) historyIndex = (historyIndex + 1) % historyCount;
+      if (historyCount > 0) {
+        String text = historyEvents[historyIndex % historyCount];
+        uint8_t pages = historyTextPageCount(text);
+        if (historyTextPage + 1 < pages) {
+          historyTextPage++;
+        } else {
+          historyTextPage = 0;
+          historyIndex = (historyIndex + 1) % historyCount;
+        }
+      }
       drawHistoryApp();
     } else if (running == APP_CLAP) {
       if (clapState == CLAP_MENU) {
@@ -2296,7 +2605,7 @@ static void handleARelease(uint32_t heldMs) {
   if (mode != MODE_APP) return;
 
   if (running == APP_COIN) {
-    coinFace = random(0, 2); drawCoinApp();
+    startCoinFlip();
   } else if (running == APP_RPS) {
     rollRps();
   } else if (running == APP_WOODFISH) {
@@ -2471,7 +2780,7 @@ static void updateMotionTriggers() {
     if (knockPhase != dir && millis() - knockPhaseAt <= 420 && millis() - lastShake > 520) {
       knockPhase = 0;
       lastShake = millis();
-      if (running == APP_COIN) { coinFace = random(0, 2); drawCoinApp(); }
+      if (running == APP_COIN) { startCoinFlip(); }
       else if (running == APP_RPS) { rollRps(); }
       else if (running == APP_WOODFISH) { playWoodfish(); }
       motionArmedAt = millis() + 420;
@@ -2549,6 +2858,7 @@ void loop() {
   updateClapMusic();
   updateSandtimer();
   updateVolumeApp();
+  updateCoinFlip();
   updateHomeClock();
   bool fastApp = mode == MODE_APP && (running == APP_HAIYAN || running == APP_DINO);
   if (!fastApp) delay(5);

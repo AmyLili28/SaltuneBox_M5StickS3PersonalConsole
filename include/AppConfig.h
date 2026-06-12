@@ -46,7 +46,7 @@ static const AppInfo APPS[] = {
   { APP_RPS, "RPS", "/img/rps.jpg" },
   { APP_SANDTIMER, "Sandtimer", "/img/sandtimer.jpg" },
   { APP_HAIYAN, "Haiyan", "/img/haiyan.jpg" },
-  { APP_VOLUME, "Volume", "" },
+  { APP_VOLUME, "Volume", "/img/volume.jpg" },
   { APP_WIFI, "WiFi Setup", "/img/wifi_setup.jpg" },
   { APP_WEATHER, "Weather", "/img/weather.jpg" },
   { APP_HISTORY, "Today History", "/img/history.jpg" },

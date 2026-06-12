@@ -140,6 +140,13 @@ static String currentPlace = "Current";
 static bool timeSynced = false;
 static uint32_t lastRtcSyncTry = 0;
 static uint32_t lastHomeDraw = 0;
+static uint32_t batteryLastSample = 0;
+static float batteryFilteredMv = 0;
+static float batteryFilteredPct = 0;
+static int batteryCachedPct = 0;
+static bool batteryCachedCharging = false;
+static uint32_t lastUserActivity = 0;
+static bool displayDimmed = false;
 
 static bool memoRecording = false;
 static bool memoHasFile = false;
@@ -174,6 +181,9 @@ static constexpr uint16_t SAND_MAX_SECONDS = 3600;
 static constexpr uint16_t SAND_STEP_SECONDS = 30;
 static constexpr uint32_t DINO_MAX_DUCK_MS = 1800;
 static constexpr uint32_t COIN_FLIP_MS = 800;
+static constexpr uint8_t DISPLAY_ACTIVE_BRIGHTNESS = 180;
+static constexpr uint8_t DISPLAY_IDLE_BRIGHTNESS = 65;
+static constexpr uint32_t DISPLAY_DIM_AFTER_MS = 25000;
 
 static void refreshLocationFromNetwork();
 
@@ -318,6 +328,103 @@ static uint8_t historyTextPageCount(const String& text) {
   return pages ? pages : 1;
 }
 
+static int batteryPercentFromMv(int mv, bool charging) {
+  if (mv <= 0) {
+    int level = M5.Power.getBatteryLevel();
+    return constrain(level, 0, 100);
+  }
+  if (charging) mv -= 35;
+  struct Point { int mv; int pct; };
+  static constexpr Point curve[] = {
+    {3300, 0}, {3450, 3}, {3550, 8}, {3600, 14}, {3650, 22},
+    {3700, 34}, {3750, 47}, {3800, 60}, {3850, 72}, {3900, 82},
+    {3950, 89}, {4000, 94}, {4100, 98}, {4200, 100}
+  };
+  if (mv <= curve[0].mv) return 0;
+  for (size_t i = 1; i < sizeof(curve) / sizeof(curve[0]); ++i) {
+    if (mv <= curve[i].mv) {
+      int spanMv = curve[i].mv - curve[i - 1].mv;
+      int spanPct = curve[i].pct - curve[i - 1].pct;
+      return curve[i - 1].pct + (mv - curve[i - 1].mv) * spanPct / spanMv;
+    }
+  }
+  return 100;
+}
+
+static int readBatteryMvAveraged() {
+  int samples[8];
+  int count = 0;
+  for (int i = 0; i < 8; ++i) {
+    int mv = M5.Power.getBatteryVoltage();
+    if (mv > 2500 && mv < 4600) samples[count++] = mv;
+    delay(2);
+  }
+  if (count == 0) return 0;
+  int minMv = samples[0], maxMv = samples[0], sum = 0;
+  for (int i = 0; i < count; ++i) {
+    minMv = min(minMv, samples[i]);
+    maxMv = max(maxMv, samples[i]);
+    sum += samples[i];
+  }
+  if (count >= 4) {
+    sum -= minMv + maxMv;
+    count -= 2;
+  }
+  return sum / count;
+}
+
+static int readStableBatteryPercent(bool* chargingOut = nullptr) {
+  uint32_t now = millis();
+  if (batteryLastSample && now - batteryLastSample < 1200) {
+    if (chargingOut) *chargingOut = batteryCachedCharging;
+    return batteryCachedPct;
+  }
+
+  bool charging = M5.Power.isCharging() == m5::Power_Class::is_charging_t::is_charging;
+  int mv = readBatteryMvAveraged();
+  int rawPct = batteryPercentFromMv(mv, charging);
+
+  if (batteryLastSample == 0) {
+    batteryFilteredMv = mv;
+    batteryFilteredPct = rawPct;
+  } else {
+    float alpha = charging ? 0.16f : 0.10f;
+    batteryFilteredMv = batteryFilteredMv * (1.0f - alpha) + mv * alpha;
+    batteryFilteredPct = batteryFilteredPct * (1.0f - alpha) + rawPct * alpha;
+    if (!charging && rawPct > batteryFilteredPct + 6.0f) {
+      batteryFilteredPct += 1.0f;
+    }
+  }
+
+  batteryLastSample = now;
+  batteryCachedCharging = charging;
+  batteryCachedPct = constrain((int)roundf(batteryFilteredPct), 0, 100);
+  if (chargingOut) *chargingOut = batteryCachedCharging;
+  return batteryCachedPct;
+}
+
+static void setDisplayActive() {
+  lastUserActivity = millis();
+  if (displayDimmed) {
+    M5.Display.setBrightness(DISPLAY_ACTIVE_BRIGHTNESS);
+    displayDimmed = false;
+  }
+}
+
+static void updateDisplayPowerSave() {
+  if (mode == MODE_APP || memoRecording) {
+    if (displayDimmed) {
+      M5.Display.setBrightness(DISPLAY_ACTIVE_BRIGHTNESS);
+      displayDimmed = false;
+    }
+    return;
+  }
+  if (!displayDimmed && millis() - lastUserActivity > DISPLAY_DIM_AFTER_MS) {
+    M5.Display.setBrightness(DISPLAY_IDLE_BRIGHTNESS);
+    displayDimmed = true;
+  }
+}
+
 static void drawStatusBar() {
   auto& d = M5.Display;
   d.fillRect(0, 0, SCREEN_W, 25, COLOR_BG);
@@ -334,15 +441,15 @@ static void drawStatusBar() {
   d.setTextColor(COLOR_FG, COLOR_BG);
   d.drawString(line, 4, 7);
 
-  int bat = M5.Power.getBatteryLevel();
-  if (bat < 0) bat = 0;
-  if (bat > 100) bat = 100;
+  bool charging = false;
+  int bat = readStableBatteryPercent(&charging);
   snprintf(line, sizeof(line), "%d%%", bat);
   uint16_t batColor = bat > 45 ? COLOR_GREEN : (bat > 20 ? COLOR_YELLOW : COLOR_RED);
   int iconX = SCREEN_W - 45;
   d.drawRoundRect(iconX, 7, 14, 8, 2, COLOR_FG);
   d.fillRect(iconX + 14, 10, 2, 3, COLOR_FG);
   d.fillRect(iconX + 2, 9, map(bat, 0, 100, 0, 10), 4, batColor);
+  if (charging) d.fillTriangle(iconX + 6, 8, iconX + 3, 14, iconX + 9, 14, COLOR_PINK);
   d.setTextDatum(top_right);
   d.drawString(line, SCREEN_W - 4, 7);
 }
@@ -427,15 +534,14 @@ static void drawHome() {
   d.setTextColor(COLOR_MUTED, bg);
   d.drawString(line, SCREEN_W / 2, 15);
 
-  int bat = M5.Power.getBatteryLevel();
-  if (bat < 0) bat = 0;
-  if (bat > 100) bat = 100;
+  bool charging = false;
+  int bat = readStableBatteryPercent(&charging);
   uint16_t batColor = COLOR_PINK;
 
   d.drawRoundRect(22, 34, SCREEN_W - 44, 15, 4, COLOR_MUTED);
   d.fillRoundRect(25, 37, map(bat, 0, 100, 0, SCREEN_W - 50), 9, 3, batColor);
   d.setTextColor(COLOR_MUTED, bg);
-  d.drawString(String("Battery ") + bat + "%", SCREEN_W / 2, 56);
+  d.drawString(String("Battery ") + bat + "%" + (charging ? " +" : ""), SCREEN_W / 2, 56);
 
   d.fillRoundRect(8, 66, SCREEN_W - 16, 76, 8, panel);
   d.setTextDatum(middle_center);
@@ -489,6 +595,7 @@ static void ensureWifiPortalAp() {
 }
 
 static void enterLauncherAt(AppId app) {
+  setDisplayActive();
   selected = app;
   mode = MODE_LAUNCHER;
   stopWifiPortal();
@@ -862,6 +969,19 @@ static bool finishWifiConnect() {
   return true;
 }
 
+static void disconnectWifiAndForgetRuntimeCreds() {
+  WiFi.persistent(false);
+  WiFi.disconnect(false, true);
+  wifiNetCached = false;
+  delay(80);
+  if (wifiPortalOn) {
+    WiFi.mode(WIFI_AP_STA);
+    ensureWifiPortalAp();
+  } else {
+    WiFi.mode(WIFI_STA);
+  }
+}
+
 static bool connectWifiCredential(const String& ssid, const String& pass, uint32_t timeoutMs) {
   if (!ssid.length()) return false;
   WiFi.persistent(false);
@@ -906,16 +1026,15 @@ static bool connectSavedWifi(uint32_t timeoutMs = 6500) {
   WiFi.persistent(false);
   WiFi.setSleep(false);
   WiFi.mode(wifiPortalOn ? WIFI_AP_STA : WIFI_STA);
-  WiFi.begin();
-  uint32_t start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < timeoutMs) {
-    delay(80);
-  }
-  if (finishWifiConnect()) return true;
-  WiFi.disconnect(false, false);
 
   loadWifiSelection();
   uint8_t count = savedWifiCount();
+  if (count == 0) {
+    disconnectWifiAndForgetRuntimeCreds();
+    wifiPortalStatus = "No saved WiFi";
+    return false;
+  }
+
   for (uint8_t attempt = 0; attempt < count; ++attempt) {
     uint8_t index = (wifiSelectedIndex + attempt) % count;
     String ssid, pass;
@@ -2507,6 +2626,7 @@ static void drawApp() {
 }
 
 static void enterApp() {
+  setDisplayActive();
   running = selected;
   mode = MODE_APP;
   resetAppState(running);
@@ -2676,9 +2796,7 @@ static void handleARelease(uint32_t heldMs) {
         deleteWifiNetwork(wifiSelectedIndex);
         wifiPortalStatus = String("Forgot ") + shortText(ssid, 12);
         if (WiFi.status() == WL_CONNECTED && WiFi.SSID() == ssid) {
-          WiFi.disconnect(false, false);
-          wifiNetCached = false;
-          ensureWifiPortalAp();
+          disconnectWifiAndForgetRuntimeCreds();
         }
       } else {
         wifiPortalStatus = "No saved WiFi";
@@ -2713,6 +2831,7 @@ static void handleARelease(uint32_t heldMs) {
 static void updateButtons() {
   bool bDown = M5.BtnB.isPressed();
   if (bDown && !bWasDown) {
+    setDisplayActive();
     bDownAt = millis();
     if (mode == MODE_APP && running == APP_DINO && dinoState == DINO_PLAY) {
       dinoDuckHeld = true;
@@ -2729,6 +2848,7 @@ static void updateButtons() {
 
   bool aDown = M5.BtnA.isPressed();
   if (aDown && !aWasDown) {
+    setDisplayActive();
     aDownAt = millis();
     if (mode == MODE_APP && running == APP_CLAP && (clapState == CLAP_GAME || clapState == CLAP_PRACTICE)) {
       registerClapHit();
@@ -2823,7 +2943,8 @@ void setup() {
   cfg.internal_mic = true;
   M5.begin(cfg);
   M5.Display.setRotation(0);
-  M5.Display.setBrightness(180);
+  M5.Display.setBrightness(DISPLAY_ACTIVE_BRIGHTNESS);
+  lastUserActivity = millis();
   M5.Speaker.setVolume(96);
   LittleFS.begin(true);
   M5.Mic.end();
@@ -2860,6 +2981,7 @@ void loop() {
   updateVolumeApp();
   updateCoinFlip();
   updateHomeClock();
+  updateDisplayPowerSave();
   bool fastApp = mode == MODE_APP && (running == APP_HAIYAN || running == APP_DINO);
   if (!fastApp) delay(5);
 }

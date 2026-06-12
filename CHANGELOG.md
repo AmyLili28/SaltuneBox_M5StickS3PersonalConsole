@@ -1,5 +1,31 @@
 ﻿# 更新日志
 
+### 2026-06-12 +08:00 设备资源、WiFi 删除与电量显示补记
+
+北京时间 02:10
+- 新增保守省电策略：Home 和功能选择页超过 25 秒无按键操作后自动降低屏幕背光，按 A/B 或进入任意程序会立即恢复正常亮度。
+- 为避免影响现有功能，录音、Dino、Clapping Music、Haiyan、Sandtimer、WiFi Setup、Weather、Today History 等程序运行时不自动降亮，也不改变 WiFi、声音、动作感应和程序内部逻辑。
+
+北京时间 01:50
+- 主时钟页和程序选择页的电量显示改为基于电池电压的平滑估算：读取多次 `M5.Power.getBatteryVoltage()` 后去掉极值并按锂电池电压曲线换算百分比，减少原先 `getBatteryLevel()` 跳动或体感不准的问题。
+- 充电状态下会对电压估算做轻微修正，并在电池显示旁增加充电标记；主时钟页继续保持粉色电池条，只调整读数算法，不改变其它页面逻辑。
+- 说明：M5StickS3 没有手机那种独立电量计芯片，本次属于电压曲线估算和滤波优化，能让显示更稳定，但不能做到百分百精确。
+
+北京时间 01:20
+- 修复 WiFi Setup 删除已保存网络后仍会自动重连的问题：删除当前连接的网络时，同时清除 ESP32 WiFi 运行时保存的凭据，并关闭无参数 `WiFi.begin()` 的隐式重连路径。
+- 当保存网络数量为 0 时，自动连接流程会明确返回 `No saved WiFi`，不再沿用芯片内部残留的上一次 SSID/密码。
+- 保持 WiFi Setup 的 AP 配网入口可用：断开 STA 后仍会维持或恢复 `M5StickS3-Setup` 热点，方便重新配网。
+
+北京时间 00:50
+- 功能选择页更新 6 个新图标资源：`Today History`、`One Message`、`Weather`、`Haiyan`、`Volume`、`Dino`。
+- 新增 `data/img/volume.jpg`，并把 `Volume` 功能入口改为显示该图标；其它功能内部逻辑不变。
+- 新资源已通过 LittleFS 烧录到两台 M5StickS3：一台在 `COM4`，另一台在 `COM9`。
+
+北京时间 00:05
+- Today History 在线链路实机确认：`https://api.dayinhistory.dev/v1/...` 作为 M5StickS3 可用的首选路径，Wikipedia/Wikimedia 作为后备，本地音乐史只作为最后兜底。
+- Today History 长内容显示已改为单条事件内分页，B 键先翻完当前事件的文本页，再切换下一条，解决一页显示不完整的问题。
+- 临时诊断版已清理，正式显示恢复为 `Music/Rock`、年份、事件正文与页码。
+
 ### 2026-06-02 +08:00 Today History 与 Coin Flip 微调
 
 北京时间 15:04

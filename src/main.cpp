@@ -3,6 +3,7 @@
 #include <LittleFS.h>
 #include <M5Unified.h>
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <HTTPClient.h>
@@ -120,6 +121,7 @@ static uint32_t lastWifiApCheck = 0;
 static uint32_t lastWifiStatusDraw = 0;
 static uint32_t lastWifiNetCheck = 0;
 static bool wifiNetCached = false;
+static bool wifiJoinedNoInternet = false;
 static String wifiPortalStatus = "Ready";
 static constexpr uint8_t WIFI_MAX_SAVED = 5;
 static uint8_t wifiSelectedIndex = 0;
@@ -799,6 +801,27 @@ static bool internetOk() {
   return dnsProbe("ntp.aliyun.com") || dnsProbe("www.baidu.com");
 }
 
+static void configureWifiClientRadio() {
+  WiFi.persistent(false);
+  WiFi.setSleep(false);
+  wifi_country_t country = { "CN", 1, 13, WIFI_COUNTRY_POLICY_MANUAL };
+  esp_wifi_set_country(&country);
+  esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+}
+
+static const char* wifiStatusText(wl_status_t status) {
+  switch (status) {
+    case WL_IDLE_STATUS: return "idle";
+    case WL_NO_SSID_AVAIL: return "no ssid";
+    case WL_SCAN_COMPLETED: return "scan done";
+    case WL_CONNECTED: return "joined";
+    case WL_CONNECT_FAILED: return "bad pass";
+    case WL_CONNECTION_LOST: return "lost";
+    case WL_DISCONNECTED: return "disconnected";
+    default: return "unknown";
+  }
+}
+
 static bool syncRtcFromNetwork(uint32_t timeoutMs = 5000) {
   if (WiFi.status() != WL_CONNECTED) return false;
   configTzTime("CST-8", "ntp.aliyun.com", "ntp.tencent.com", "cn.pool.ntp.org");
@@ -960,11 +983,16 @@ static void saveCurrentPlace(String city) {
 }
 
 static bool finishWifiConnect() {
-  if (!internetOk()) return false;
-  syncRtcFromNetwork(6000);
-  refreshLocationFromNetwork();
-  wifiPortalStatus = String("Online ") + WiFi.localIP().toString();
-  wifiNetCached = true;
+  if (WiFi.status() != WL_CONNECTED) return false;
+  wifiNetCached = internetOk();
+  wifiJoinedNoInternet = !wifiNetCached;
+  if (wifiNetCached) {
+    syncRtcFromNetwork(6000);
+    refreshLocationFromNetwork();
+    wifiPortalStatus = String("Online ") + WiFi.localIP().toString();
+  } else {
+    wifiPortalStatus = String("Joined ") + WiFi.localIP().toString();
+  }
   lastWifiNetCheck = millis();
   return true;
 }
@@ -973,6 +1001,7 @@ static void disconnectWifiAndForgetRuntimeCreds() {
   WiFi.persistent(false);
   WiFi.disconnect(false, true);
   wifiNetCached = false;
+  wifiJoinedNoInternet = false;
   delay(80);
   if (wifiPortalOn) {
     WiFi.mode(WIFI_AP_STA);
@@ -982,24 +1011,32 @@ static void disconnectWifiAndForgetRuntimeCreds() {
   }
 }
 
-static bool connectWifiCredential(const String& ssid, const String& pass, uint32_t timeoutMs) {
+static bool connectWifiCredential(const String& ssid, const String& pass, uint32_t timeoutMs, bool servicePortal = true) {
   if (!ssid.length()) return false;
-  WiFi.persistent(false);
-  WiFi.setSleep(false);
+  configureWifiClientRadio();
   WiFi.mode(wifiPortalOn ? WIFI_AP_STA : WIFI_STA);
-  WiFi.begin(ssid.c_str(), pass.c_str());
-  uint32_t start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < timeoutMs) {
-    if (wifiPortalOn) {
-      dnsServer.processNextRequest();
-      server.handleClient();
-      ensureWifiPortalAp();
+  wl_status_t lastStatus = WL_IDLE_STATUS;
+  for (uint8_t attempt = 0; attempt < 2; ++attempt) {
+    WiFi.disconnect(false, false);
+    delay(160);
+    bool hiddenRetry = attempt == 1;
+    wifiPortalStatus = String(hiddenRetry ? "Retry " : "Connecting ") + shortText(ssid, 11);
+    WiFi.begin(ssid.c_str(), pass.c_str(), 0, nullptr, hiddenRetry);
+    uint32_t start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < timeoutMs) {
+      if (servicePortal && wifiPortalOn) {
+        dnsServer.processNextRequest();
+        server.handleClient();
+        ensureWifiPortalAp();
+      }
+      delay(80);
     }
-    delay(80);
+    lastStatus = WiFi.status();
+    if (finishWifiConnect()) return true;
   }
-  if (finishWifiConnect()) return true;
   WiFi.disconnect(false, false);
   if (wifiPortalOn) ensureWifiPortalAp();
+  wifiPortalStatus = String("Failed ") + wifiStatusText(lastStatus);
   return false;
 }
 
@@ -1014,7 +1051,7 @@ static bool connectSelectedWifi(uint32_t timeoutMs = 6500) {
   wifiPortalStatus = String("Connecting ") + shortText(ssid, 12);
   if (connectWifiCredential(ssid, pass, timeoutMs)) {
     saveWifiSelection(wifiSelectedIndex);
-    wifiPortalStatus = String("Online ") + shortText(ssid, 12);
+    wifiPortalStatus = String(wifiNetCached ? "Online " : "Joined ") + shortText(ssid, 12);
     return true;
   }
   wifiPortalStatus = String("Failed ") + shortText(ssid, 12);
@@ -1530,9 +1567,11 @@ static void updateVoiceMemo() {
 static String portalPage(const String& msg = "") {
   return String("<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>"
     "<style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#10131a;color:#fff;padding:22px}"
+    ".tip{font-size:14px;line-height:1.45;color:#cbd5e1;background:#1f2937;padding:12px;border-radius:10px}"
     "input,button{width:100%;font-size:18px;margin:8px 0;padding:12px;border-radius:10px;border:0}"
     "button{background:#60a5fa;color:#06101f}</style><h2>M5StickS3 WiFi Setup</h2>") +
     (msg.length() ? "<p>" + msg + "</p>" : "") +
+    "<p class=tip>iPhone hotspot tip: open Settings > Personal Hotspot, turn on Maximize Compatibility, keep this page open, and use the exact hotspot name/password.</p>"
     "<form method=post action=/save><input name=ssid placeholder=SSID><input name=pass placeholder=Password type=password>"
     "<button>Save and connect</button></form>";
 }
@@ -1554,36 +1593,22 @@ static void startWifiPortal() {
       server.send(200, "text/html", portalPage("SSID required."));
       return;
     }
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.setSleep(false);
-    WiFi.begin(ssid.c_str(), pass.c_str());
-    uint32_t start = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start < 12000) {
-      dnsServer.processNextRequest();
-      if (millis() - lastWifiApCheck > 1000) {
-        lastWifiApCheck = millis();
-        ensureWifiPortalAp();
-      }
-      delay(50);
-    }
-    if (internetOk()) {
-      syncRtcFromNetwork(6000);
-      refreshLocationFromNetwork();
+    if (connectWifiCredential(ssid, pass, 20000, false)) {
       saveWifiNetwork(ssid, pass);
-      wifiPortalStatus = String("Saved + online ") + WiFi.localIP().toString();
-      wifiNetCached = true;
-      lastWifiNetCheck = millis();
-      server.send(200, "text/html", portalPage(String("Connected and saved. IP ") + WiFi.localIP().toString()));
+      String okMsg = wifiNetCached
+        ? String("Connected and saved. IP ") + WiFi.localIP().toString()
+        : String("WiFi joined and saved. If this is iPhone, keep hotspot on and check Maximize Compatibility. IP ") + WiFi.localIP().toString();
+      wifiPortalStatus = wifiNetCached
+        ? String("Saved + online ") + WiFi.localIP().toString()
+        : String("Saved joined ") + WiFi.localIP().toString();
+      server.send(200, "text/html", portalPage(okMsg));
     } else {
-      bool joined = WiFi.status() == WL_CONNECTED;
-      WiFi.disconnect(false, false);
       ensureWifiPortalAp();
-      wifiPortalStatus = joined ? "Joined, no Internet" : "Connect failed";
+      wifiPortalStatus = "Connect failed";
       wifiNetCached = false;
+      wifiJoinedNoInternet = false;
       lastWifiNetCheck = millis();
-      server.send(200, "text/html", portalPage(joined
-        ? "WiFi joined, Internet check failed. Not saved."
-        : "WiFi connection failed. Not saved."));
+      server.send(200, "text/html", portalPage("WiFi connection failed. For iPhone: turn on Maximize Compatibility and keep Personal Hotspot screen open."));
     }
   });
   server.begin();

@@ -1,83 +1,123 @@
-# M5StickS3 Personal Console Native
+# Saltune Box
 
-这是把原 UIFlow2/MicroPython 项目迁移到 Arduino/C++ 的工程，项目目录固定在 `D:\Codex\M5StickS3PersonalConsole`。资源使用 LittleFS，图片和音频放在 `data/`。
+基于 M5StickS3 的个人音乐互动终端。
 
-## 当前状态
+Saltune Box 是一个使用 Arduino/C++ 与 PlatformIO 开发的 ESP32-S3 固件项目。它将节奏练习、录音备忘、动作感应、轻量游戏、联网信息和动态视觉整合在一台便携设备中，并使用 LittleFS 管理运行资源。
 
-- PlatformIO Core 位于 `D:\Codex\pio-py311`。
-- PlatformIO 缓存、平台和工具链位于用户目录 `.platformio`。
-- 本地库已放入 `lib/`：`M5Unified`、`M5GFX`、`ArduinoJson`。
-- 当前默认上传端口为 `COM4`，脚本会优先自动寻找 ESP32-S3 下载口。
-- 固件编译通过，LittleFS 镜像生成通过。
-- 最近一次完整烧录包含 LittleFS 资源和固件；设备进入下载模式时会显示为 ESP32-S3 下载口。
+> 本仓库用于项目展示与技术学习。原创代码、界面、图像、音频及文档保留全部权利，具体见 [COPYRIGHT.md](COPYRIGHT.md)。
 
-## 编译和烧录
+## 项目特点
+
+- 针对 M5StickS3 的 128 x 240 像素屏幕和双按键交互设计。
+- 使用 IMU 实现敲击、倾斜和重力方向感应。
+- 使用内置麦克风与扬声器实现录音、回放和音效。
+- 使用 LittleFS 分离固件与图片、音频等运行资源。
+- 使用 Preferences / NVS 保存设置、分数和网络配置。
+- 支持 RTC、NTP 时间同步以及 WiFi 联网功能。
+
+## 功能概览
+
+| 模块 | 说明 |
+| --- | --- |
+| Home | 日期、时间、电量和网络状态显示。 |
+| Clapping Music | 多难度节奏练习与准确率统计。 |
+| Dino | 支持跳跃、趴下和最高分保存的轻量游戏。 |
+| Voice Memo | 本地 WAV 录音、播放和删除。 |
+| Coin Flip | 按键或纵向敲击触发的随机硬币结果。 |
+| Woodfish | 支持音效和计数保存的电子木鱼。 |
+| RPS | 按键或纵向敲击触发的石头剪刀布。 |
+| Sandtimer | 通过左右倾斜设置时长的重力沙漏。 |
+| Haiyan | 根据设备姿态变化的瓶中流体视觉效果。 |
+| Volume | 使用方向敲击逐级调节系统音量。 |
+| WiFi Setup | AP 配网及多网络本地管理。 |
+| Weather | 基于联网信息显示天气。 |
+| Today History | 音乐与摇滚主题的历史事件，支持离线兜底。 |
+| Hidden Entry | 保留内容说明的最终交互入口。 |
+
+## 硬件与技术
+
+| 类别 | 内容 |
+| --- | --- |
+| 目标设备 | M5StickS3 / ESP32-S3 |
+| 开发框架 | Arduino / C++ |
+| 构建工具 | PlatformIO |
+| 设备与图形 | M5Unified、M5GFX |
+| 数据解析 | ArduinoJson |
+| 文件系统 | LittleFS |
+| 本地存储 | Preferences / NVS |
+| 设备能力 | LCD、按键、IMU、麦克风、扬声器、RTC、WiFi |
+
+## 基本操作
+
+- 电源键短按：开机或唤醒。
+- 电源键长按：进入待机 / 低功耗状态。
+- 电源键快速双击：关机。
+- 主时钟页短按 A 或 B：进入功能选择页。
+- 功能选择页短按 B：切换功能。
+- 功能选择页短按 A：进入当前功能。
+- 多数功能内长按 B：返回上一级。
+
+各功能的完整操作说明见项目说明书。README 仅保留公开项目所需的概要信息。
+
+## 构建环境
+
+建议使用 PlatformIO Core 6.x 或安装了 PlatformIO 扩展的 Visual Studio Code。本项目将 Espressif32 平台固定为 `7.0.1`，第三方库当前保存在 `lib/` 中，以保持现有固件构建的一致性。
 
 ```powershell
-cd D:\Codex\M5StickS3PersonalConsole
-D:\Codex\pio-py311\Scripts\platformio.exe run
-D:\Codex\pio-py311\Scripts\platformio.exe run -t buildfs
+pio run
+```
+
+如需指定串口，可将 `COMx` 替换为设备实际端口：
+
+```powershell
+pio run -t upload --upload-port COMx
+```
+
+## 完整烧录
+
+新设备首次部署需要同时烧录固件和 LittleFS 资源：
+
+```powershell
+pio run -t uploadfs --upload-port COMx
+pio run -t upload --upload-port COMx
+```
+
+Windows 用户也可以运行通用烧录脚本。脚本会尝试识别 ESP32-S3 串口，并依次上传文件系统和固件：
+
+```powershell
 .\tools\flash.ps1
 ```
 
-如果上传失败，长按设备按键进入下载模式，看到内部绿灯闪烁后重新运行 `.\tools\flash.ps1`。
+如果只修改了 C++ 逻辑，可以仅上传固件；如果修改了 `data/` 中的图片或音频，则必须重新上传 LittleFS。
 
-## A6 说明书小册子
+## 项目结构
 
-说明书排版源文件放在 `src/index.html` 和 `src/styles.css`，导出脚本是 `src/generate.py`。最终文件会生成到 `dist/`：
-
-- `dist/manual_A6_single_pages.pdf`：A6 单页顺序预览版。
-- `dist/manual_A6_print_ready.pdf`：带 3mm 出血和裁切标记的打印版。
-- `dist/manual_A6_preview.png`：封面和内页预览图。
-
-最终版《Saltune Box》红黑说明书保存在 `dist/final_manual/`：
-
-- `Saltune_Box_V6_red_black_reading_preview_64x98mm_P24fix.pdf`：阅读预览版。
-- `Saltune_Box_V6_red_black_print_bleed_pages_70x104mm_P24fix.pdf`：单页带出血打印版。
-- `Saltune_Box_V6_red_black_saddle_stitch_imposed_bleed_P24fix.pdf`：骑马钉拼版带出血版。
-
-重新导出：
-
-```powershell
-python src\generate.py
-```
-
-更详细的文字替换、手写字体替换和图片替换说明见 `docs/manual_A6_README.md`。封面手写字体会优先读取 `fonts/handwriting.ttf`，没有该文件时使用系统手写感 fallback。
-
-## 已迁移功能
-
-| 功能 | 状态 |
+| 路径 | 用途 |
 | --- | --- |
-| Home | 联网后用 NTP 同步北京时间到 RTC，居中显示日期/星期、大号时间、时间上方电池条、WiFi 状态、YR 标志、`Don't be afraid`、`Only for Zion Yan` 与 `Designated by YIlin`；无有效 RTC 时会在 Home 继续重试 |
-| Launcher | B 短按切换功能，A 进入功能，B 长按回 Home；顶部显示日期/时间与电量；功能页使用 `135x135` 图片资源，图片下方显示名称 |
-| Clapping Music | 按 `PRODUCT_GUIDE.md` 恢复 12 步节奏游戏：Easy/Medium/Hard、Play/Practice、M5/YOU 双行节拍点、ACC 评分、Advance 进度、暂停/继续、Complete/Game Over；当前版本放宽节拍判定、按下 A 即刻记录输入，并把黄色显示统一替换为粉色 |
-| Voice Memo | `+ New rec` 与多条 `Memo` 列表、录音保存到 `/memo_0.wav` 到 `/memo_7.wav`、播放、长按 A 删除、录音时 B 停止保存；当前资源压缩后 LittleFS 预计可用于录音的总时长约 41 秒，实际建议按约 40 秒使用 |
-| Coin Flip | A 键或完整纵向敲击触发随机正反面；触发后会在 0.8 秒内快速随机闪烁 head/tail 图片，随后定格最终图片，并在图片下方显示 `head` 或 `tail` |
-| Woodfish | 计数保存、A 短按/摇动敲击、长按 A 清零、增强音量的 WAV 木鱼声、帧图动画 |
-| RPS | A 键或摇动触发，进入后有防误触延迟，快速闪图后横向居中显示石头/剪刀/布结果图片和英文名称 |
-| WiFi Setup | 显示 AP 名称、热点密码 `12345678`、访问地址、STA 连接状态；AP `M5StickS3-Setup`、DNS captive portal、网页配网；联网和外网检查成功后保存到最多 5 个 WiFi 列表，B 切换已保存网络，A 连接，长按 A 删除，并同步 RTC 与 Home 城市 |
-| Sandtimer | 进入后初始为 30 秒，用重力左右晃动选择 0 到 60 分钟倒计时，每次 30 秒步进；A 确认进入沙漏倒计时，运行中 A 暂停、B 切换主题，暂停后长按 B 回时间选择页 |
-| Haiyan | C++ 实时海盐模拟，按时间切换背景，交换 IMU X/Y 轴后按 bottle-of-ocean 风格重力映射，让水体始终流向屏幕里的新瓶底，A 重置，短按 B 不退出，长按 B 回功能页 |
-| Weather | 联网后 IP 粗定位，顶部居中显示城市，大号显示当前温度/天气图标，并列出 7 天最高/最低温和晴/阴/雨/雪状态；定位成功后把城市保存给 Home |
-| Today History | 进入后按当前 RTC 日期优先读取 `https://api.dayinhistory.dev/v1/...`，使用 M5 Stick S3 可用的 HTTPS 直连方式加载较小的历史数据，并优先筛选音乐史/摇滚相关事件；Wikipedia/Wikimedia `On this day` 作为后备来源；无 WiFi、API 不通或当天没有音乐关键词时，会使用本地音乐史兜底：有精确日期就显示当天音乐史，没有精确日期就按日期轮换摇滚/音乐史卡片；A 刷新，B 切换 |
-| Dino | Google 离线小恐龙风格游戏：A 跳跃，B 短按/按住趴下，趴下最长持续约 1.8 秒；暂停/入口/结束页长按 B 回功能页；结束页 A 再来一局、B 回入口页，最高分保存到 NVS |
+| `src/main.cpp` | 固件主循环、页面状态和功能实现。 |
+| `include/AppConfig.h` | 应用枚举、颜色、尺寸和功能图标配置。 |
+| `include/HaiyanSim.h` | Haiyan 流体视觉模拟。 |
+| `data/img/` | 设备运行所需的 LittleFS 图片。 |
+| `data/audio/` | 设备运行所需的 LittleFS 音频。 |
+| `lib/` | 固定版本的第三方依赖及其许可证。 |
+| `tools/` | 烧录和资源优化辅助工具。 |
+| `docs/` | 技术说明与项目文档。 |
+| `CHANGELOG.md` | 功能迭代和修复记录。 |
 
-所有独立功能内，长按 B 返回功能选择页并停留在当前功能卡片；回到功能选择页后，短按 B 继续切换下一个功能，长按 B 返回 Home。
+## 数据与隐私
 
-## 资源
+- 仓库不包含私人 WiFi 凭据、录音文件、API 密钥或访问令牌。
+- 用户填写的 WiFi 信息仅保存在设备本地 NVS。
+- Voice Memo 录音仅保存在设备本地 LittleFS。
+- Weather 不读取 GPS，位置结果仅为基于网络信息的粗略判断。
+- 网络内容不可用时，Today History 会使用本地音乐史内容。
 
-主要资源路径：
+## 项目状态
 
-- 功能页图片：`data/img/*.jpg`
-- RPS 结果图片：`data/img/rps_rock.jpg`、`rps_scissors.jpg`、`rps_paper.jpg`
-- Coin Flip 结果图片：`data/img/coin_head.jpg`、`data/img/coin_tail.jpg`
-- 木鱼动画帧：`data/img/woodfish_frame0.jpg` 到 `woodfish_frame4.jpg`
-- 木鱼音效：`data/audio/woodfish_knock.wav`
-- Today History 功能页图片：`data/img/history.jpg`
-- Dino 功能页图片：`data/img/dino.jpg`
-- Home YR 标志：`data/img/yr_logo.jpg`
-- Native Voice Memo 录音槽位：`/memo_0.wav` 到 `/memo_7.wav`，并兼容旧的 `/memo.wav`
+当前固件面向 M5StickS3 实机维护。更新内容见 [CHANGELOG.md](CHANGELOG.md)，技术结构见 [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md)。
 
-当前 `data/` 资源约 110.7KB；LittleFS 分区为 0x160000 字节。Voice Memo 使用 16kHz / 16-bit / mono WAV，约 32KB/s，因此总录音空间约 41 秒，考虑文件系统元数据后建议按约 40 秒使用。
+## 权利说明
 
-注意：当前固件只打包和显示 JPG 图片。动画在代码里按 JPG 帧切换图片实现，避免把未使用的 PNG 解码器编进固件。
+Saltune Box 的原创代码、产品名称、界面设计、图片、音频和文档由刘译璘保留全部权利。未经书面许可，不得复制、修改、再发布或用于商业用途。
+
+`lib/` 中的第三方组件不属于上述原创内容，其使用分别受组件目录内原许可证约束。

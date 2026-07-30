@@ -7,7 +7,7 @@
 - 源文件：`src/index.html`
 - 样式文件：`src/styles.css`
 - 导出脚本：`src/generate.py`
-- 参考图：`references/ref_01.jpg` 到 `references/ref_04.jpg`
+- 视觉参考图仅保存在本地，不随公开仓库分发。
 - 最终输出：`dist/manual_A6_single_pages.pdf`
 - 打印文件：`dist/manual_A6_print_ready.pdf`
 - 预览图：`dist/manual_A6_preview.png`
@@ -50,12 +50,12 @@ fonts/handwriting.ttf
 
 ## 如何替换图片
 
-目前内页使用的是 CSS 线框、灰度占位框和几何图形，没有直接使用参考图内容。参考图只保存在 `references/` 里作为视觉风格参考。
+目前内页使用的是 CSS 线框、灰度占位框和几何图形，没有直接使用视觉参考图内容。
 
 后续要替换真实图片时，可以在 `src/index.html` 的占位区域加入：
 
 ```html
-<img src="../references/your-image.jpg" alt="">
+<img src="../assets/manual/your-image.jpg" alt="">
 ```
 
 然后在 `src/styles.css` 里给图片设置宽高、灰度或混合模式。

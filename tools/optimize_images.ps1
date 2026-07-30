@@ -1,57 +1,85 @@
-$ErrorActionPreference = 'Stop'
+param(
+    [string]$HeadSource = "",
+    [string]$TailSource = "",
+    [ValidateRange(32, 512)]
+    [int]$CoinSize = 135,
+    [ValidateRange(1, 100)]
+    [long]$CoinQuality = 68,
+    [ValidateRange(1, 100)]
+    [long]$DefaultQuality = 72
+)
+
+$ErrorActionPreference = "Stop"
+$projectRoot = Split-Path -Parent $PSScriptRoot
+Set-Location -LiteralPath $projectRoot
+
 Add-Type -AssemblyName System.Drawing
 
-$codec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
+$codec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() |
+  Where-Object { $_.MimeType -eq "image/jpeg" }
 
 function Save-Jpeg($image, $path, [long]$quality) {
-  $params = New-Object System.Drawing.Imaging.EncoderParameters(1)
-  $params.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, $quality)
-  $image.Save($path, $codec, $params)
-  $params.Dispose()
+  $parameters = New-Object System.Drawing.Imaging.EncoderParameters(1)
+  $parameters.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter(
+    [System.Drawing.Imaging.Encoder]::Quality,
+    $quality
+  )
+  $image.Save($path, $codec, $parameters)
+  $parameters.Dispose()
 }
 
-function Convert-Square($src, $dst, [int]$size, [long]$quality) {
-  $img = [System.Drawing.Image]::FromFile($src)
-  $bmp = New-Object System.Drawing.Bitmap($size, $size)
-  $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $g.Clear([System.Drawing.Color]::FromArgb(18, 18, 18))
-  $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-  $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-  $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-  $g.DrawImage($img, 0, 0, $size, $size)
-  Save-Jpeg $bmp $dst $quality
-  $g.Dispose()
-  $bmp.Dispose()
-  $img.Dispose()
+function Convert-Square($source, $destination, [int]$size, [long]$quality) {
+  if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+    throw "Image source not found: $source"
+  }
+
+  $image = [System.Drawing.Image]::FromFile($source)
+  $bitmap = New-Object System.Drawing.Bitmap($size, $size)
+  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+  $graphics.Clear([System.Drawing.Color]::FromArgb(18, 18, 18))
+  $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+  $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+  $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+  $graphics.DrawImage($image, 0, 0, $size, $size)
+  Save-Jpeg $bitmap $destination $quality
+  $graphics.Dispose()
+  $bitmap.Dispose()
+  $image.Dispose()
 }
 
-$headSource = 'C:\Users\ccgg6\Downloads\Image_1780309471361_8.png'
-$tailSource = 'C:\Users\ccgg6\Downloads\Image_1780309477100_391.png'
+if ([bool]$HeadSource -xor [bool]$TailSource) {
+  throw "Pass both -HeadSource and -TailSource, or omit both."
+}
 
-Convert-Square $headSource 'data\img\coin_head.jpg' 135 68
-Convert-Square $tailSource 'data\img\coin_tail.jpg' 135 68
+if ($HeadSource -and $TailSource) {
+  Convert-Square $HeadSource "data\img\coin_head.jpg" $CoinSize $CoinQuality
+  Convert-Square $TailSource "data\img\coin_tail.jpg" $CoinSize $CoinQuality
+}
 
-$before = (Get-ChildItem data\img\*.jpg | Measure-Object Length -Sum).Sum
-foreach ($file in Get-ChildItem data\img\*.jpg) {
-  $tmp = "$($file.FullName).tmp"
-  $img = [System.Drawing.Image]::FromFile($file.FullName)
-  $bmp = New-Object System.Drawing.Bitmap($img.Width, $img.Height)
-  $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-  $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-  $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-  $g.DrawImage($img, 0, 0, $img.Width, $img.Height)
-  $quality = if ($file.Name -like 'coin_*') { 68 } else { 72 }
-  Save-Jpeg $bmp $tmp $quality
-  $g.Dispose()
-  $bmp.Dispose()
-  $img.Dispose()
-  if ((Get-Item $tmp).Length -lt $file.Length -or $file.Name -like 'coin_*') {
-    Move-Item -Force $tmp $file.FullName
+$imageFiles = Get-ChildItem -LiteralPath "data\img" -Filter "*.jpg"
+$before = ($imageFiles | Measure-Object Length -Sum).Sum
+
+foreach ($file in $imageFiles) {
+  $temporaryPath = "$($file.FullName).tmp"
+  $image = [System.Drawing.Image]::FromFile($file.FullName)
+  $bitmap = New-Object System.Drawing.Bitmap($image.Width, $image.Height)
+  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+  $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+  $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+  $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+  $graphics.DrawImage($image, 0, 0, $image.Width, $image.Height)
+  $quality = if ($file.Name -like "coin_*") { $CoinQuality } else { $DefaultQuality }
+  Save-Jpeg $bitmap $temporaryPath $quality
+  $graphics.Dispose()
+  $bitmap.Dispose()
+  $image.Dispose()
+
+  if ((Get-Item -LiteralPath $temporaryPath).Length -lt $file.Length -or $file.Name -like "coin_*") {
+    Move-Item -LiteralPath $temporaryPath -Destination $file.FullName -Force
   } else {
-    Remove-Item $tmp
+    Remove-Item -LiteralPath $temporaryPath
   }
 }
 
-$after = (Get-ChildItem data\img\*.jpg | Measure-Object Length -Sum).Sum
-"image-bytes-before=$before after=$after saved=$($before - $after)"
+$after = (Get-ChildItem -LiteralPath "data\img" -Filter "*.jpg" | Measure-Object Length -Sum).Sum
+Write-Output "image-bytes-before=$before after=$after saved=$($before - $after)"

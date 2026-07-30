@@ -42,7 +42,7 @@
 ** with the help of this Python script:
 ** https://gist.github.com/skelliam/322d421f028545f16f6d
 ** William Skellenger (williamj@skellenger.net)
-** Twitter: @skelliam
+** Author: @skelliam
 ** 
 */
 

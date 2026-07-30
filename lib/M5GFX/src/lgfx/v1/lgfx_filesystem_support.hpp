@@ -12,7 +12,7 @@ Licence:
  [BSD](https://github.com/lovyan03/LovyanGFX/blob/master/license.txt)
 
 Author:
- [lovyan03](https://twitter.com/lovyan03)
+ lovyan03
 
 Contributors:
  [ciniml](https://github.com/ciniml)

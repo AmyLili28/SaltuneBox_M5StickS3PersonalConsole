@@ -194,7 +194,7 @@ static const char* woodfishFrames[] = {
   "/img/woodfish_frame1.jpg",
   "/img/woodfish_frame2.jpg",
   "/img/woodfish_frame3.jpg",
-  "/img/woodfish_frame4.jpg",
+  "/img/woodfish_frame0.jpg",
 };
 
 static void writeWavHeader(File& f, uint32_t pcmBytes) {
